@@ -64,9 +64,9 @@ export function FundacionCard({ fundacion, onEdit, onDelete, onViewDetails }: Fu
             <div className="flex items-center gap-2">
               <StatusIcon className={`h-4 w-4 ${config.color}`} />
               <span className={`text-sm font-medium ${config.color}`}>{config.label}</span>
-              {fundacion.lastChecked && (
+              {fundacion.last_checked && (
                 <span className="text-xs text-muted-foreground">
-                  • Revisado: {new Date(fundacion.lastChecked).toLocaleString('es-ES', {
+                  • Revisado: {new Date(fundacion.last_checked).toLocaleString('es-ES', {
                     day: '2-digit',
                     month: '2-digit',
                     year: 'numeric',

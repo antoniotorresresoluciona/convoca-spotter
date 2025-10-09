@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Building2, RefreshCw, Plus, Search, Filter, Download, TrendingUp, CheckCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,26 +7,47 @@ import { StatCard } from "@/components/StatCard";
 import { FundacionCard } from "@/components/FundacionCard";
 import { FundacionDialog } from "@/components/FundacionDialog";
 import { Fundacion } from "@/types/fundacion";
-import { initialFundaciones } from "@/data/initialFundaciones";
 import { useToast } from "@/hooks/use-toast";
+import { 
+  getFundaciones, 
+  createFundacion, 
+  updateFundacion, 
+  deleteFundacion, 
+  triggerMonitoring 
+} from "@/lib/fundacionesApi";
 
 const Index = () => {
   const { toast } = useToast();
-  const [fundaciones, setFundaciones] = useState<Fundacion[]>(() => 
-    initialFundaciones.map((f, i) => ({
-      ...f,
-      id: `fund-${i}`,
-      status: 'pending' as const,
-      createdAt: Date.now() - i * 1000,
-      sublinks: []
-    }))
-  );
+  const [fundaciones, setFundaciones] = useState<Fundacion[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingFundacion, setEditingFundacion] = useState<Fundacion | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isMonitoring, setIsMonitoring] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Cargar fundaciones al montar
+  useEffect(() => {
+    loadFundaciones();
+  }, []);
+
+  const loadFundaciones = async () => {
+    try {
+      setIsLoading(true);
+      const data = await getFundaciones();
+      setFundaciones(data);
+    } catch (error) {
+      console.error('Error loading fundaciones:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar las fundaciones",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const categories = useMemo(() => {
     const cats = new Set(fundaciones.map(f => f.category));
@@ -47,45 +68,57 @@ const Index = () => {
     const total = fundaciones.length;
     const totalSublinks = fundaciones.reduce((acc, f) => acc + (f.sublinks?.filter(s => s.enabled).length || 0), 0);
     const updated = fundaciones.filter(f => f.status === 'updated').length;
-    const lastCheck = fundaciones.reduce((max, f) => f.lastChecked && f.lastChecked > max ? f.lastChecked : max, 0);
+    const lastCheck = fundaciones.reduce((max, f) => {
+      const time = f.last_checked ? new Date(f.last_checked).getTime() : 0;
+      return time > max ? time : max;
+    }, 0);
 
     return { total, totalSublinks, updated, lastCheck };
   }, [fundaciones]);
 
-  const handleSaveFundacion = (data: Partial<Fundacion>) => {
-    if (editingFundacion) {
-      setFundaciones(prev => prev.map(f => 
-        f.id === editingFundacion.id ? { ...f, ...data } : f
-      ));
+  const handleSaveFundacion = async (data: Partial<Fundacion>) => {
+    try {
+      if (editingFundacion) {
+        await updateFundacion(editingFundacion.id, data);
+        toast({
+          title: "Fundación actualizada",
+          description: "Los cambios se han guardado correctamente",
+        });
+      } else {
+        await createFundacion(data);
+        toast({
+          title: "Fundación añadida",
+          description: "La fundación se ha añadido correctamente",
+        });
+      }
+      setEditingFundacion(null);
+      loadFundaciones();
+    } catch (error) {
+      console.error('Error saving fundacion:', error);
       toast({
-        title: "Fundación actualizada",
-        description: "Los cambios se han guardado correctamente",
-      });
-    } else {
-      const newFundacion: Fundacion = {
-        id: `fund-${Date.now()}`,
-        name: data.name!,
-        url: data.url!,
-        category: data.category!,
-        status: 'pending',
-        createdAt: Date.now(),
-        sublinks: []
-      };
-      setFundaciones(prev => [newFundacion, ...prev]);
-      toast({
-        title: "Fundación añadida",
-        description: "La fundación se ha añadido correctamente",
+        title: "Error",
+        description: "No se pudo guardar la fundación",
+        variant: "destructive",
       });
     }
-    setEditingFundacion(null);
   };
 
-  const handleDeleteFundacion = (id: string) => {
-    setFundaciones(prev => prev.filter(f => f.id !== id));
-    toast({
-      title: "Fundación eliminada",
-      description: "La fundación se ha eliminado correctamente",
-    });
+  const handleDeleteFundacion = async (id: string) => {
+    try {
+      await deleteFundacion(id);
+      toast({
+        title: "Fundación eliminada",
+        description: "La fundación se ha eliminado correctamente",
+      });
+      loadFundaciones();
+    } catch (error) {
+      console.error('Error deleting fundacion:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar la fundación",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleStartMonitoring = async () => {
@@ -95,32 +128,26 @@ const Index = () => {
       description: "Revisando todas las fundaciones...",
     });
 
-    // Simular monitoreo (en producción esto llamará al backend)
-    for (let i = 0; i < fundaciones.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setFundaciones(prev => prev.map((f, idx) => {
-        if (idx === i) {
-          const hasChanges = Math.random() > 0.7;
-          return {
-            ...f,
-            status: hasChanges ? 'updated' : 'unchanged',
-            lastChecked: Date.now(),
-            sublinks: f.sublinks?.map(s => ({
-              ...s,
-              status: Math.random() > 0.8 ? 'updated' : 'unchanged',
-              lastChecked: Date.now()
-            }))
-          };
-        }
-        return f;
-      }));
+    try {
+      const result = await triggerMonitoring();
+      
+      toast({
+        title: "Monitoreo completado",
+        description: `Se han revisado ${result.results?.total || 0} fundaciones. ${result.results?.updated || 0} con cambios detectados.`,
+      });
+      
+      // Recargar fundaciones para ver los cambios
+      await loadFundaciones();
+    } catch (error) {
+      console.error('Error during monitoring:', error);
+      toast({
+        title: "Error en el monitoreo",
+        description: "Hubo un problema al ejecutar el monitoreo",
+        variant: "destructive",
+      });
+    } finally {
+      setIsMonitoring(false);
     }
-
-    setIsMonitoring(false);
-    toast({
-      title: "Monitoreo completado",
-      description: `Se han revisado ${fundaciones.length} fundaciones`,
-    });
   };
 
   const handleExportCSV = () => {
@@ -132,7 +159,7 @@ const Index = () => {
         f.url,
         f.category,
         f.status,
-        f.lastChecked ? new Date(f.lastChecked).toLocaleString('es-ES') : 'N/A'
+        f.last_checked ? new Date(f.last_checked).toLocaleString('es-ES') : 'N/A'
       ].join(','))
     ].join('\n');
 

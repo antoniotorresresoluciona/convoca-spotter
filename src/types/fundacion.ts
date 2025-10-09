@@ -2,9 +2,11 @@ export interface Sublink {
   id: string;
   url: string;
   enabled: boolean;
-  lastHash?: string;
+  last_hash?: string;
   status: 'updated' | 'unchanged' | 'pending';
-  lastChecked?: number;
+  last_checked?: string;
+  fundacion_id?: string;
+  created_at?: string;
 }
 
 export interface Fundacion {
@@ -13,18 +15,19 @@ export interface Fundacion {
   url: string;
   category: string;
   sublinks?: Sublink[];
-  lastHash?: string;
+  last_hash?: string;
   status: 'updated' | 'unchanged' | 'pending';
-  lastChecked?: number;
-  createdAt: number;
+  last_checked?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ChangeDetected {
   id: string;
-  fundacionId: string;
-  sublinkId?: string;
+  fundacion_id: string;
+  sublink_id?: string;
   url: string;
-  detectedAt: number;
+  detected_at: string;
   reviewed: boolean;
-  changes?: string;
+  changes_description?: string;
 }
