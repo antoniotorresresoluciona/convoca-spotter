@@ -59,10 +59,12 @@ export type Database = {
           },
         ]
       }
-      fundaciones: {
+      entes_publicos: {
         Row: {
           category: string
           created_at: string
+          enabled: boolean
+          entity: string
           id: string
           last_checked: string | null
           last_hash: string | null
@@ -74,6 +76,8 @@ export type Database = {
         Insert: {
           category: string
           created_at?: string
+          enabled?: boolean
+          entity: string
           id?: string
           last_checked?: string | null
           last_hash?: string | null
@@ -85,6 +89,8 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
+          enabled?: boolean
+          entity?: string
           id?: string
           last_checked?: string | null
           last_hash?: string | null
@@ -94,6 +100,169 @@ export type Database = {
           url?: string
         }
         Relationships: []
+      }
+      entes_publicos_sublinks: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          ente_id: string
+          id: string
+          last_checked: string | null
+          last_hash: string | null
+          status: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          ente_id: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          status?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          ente_id?: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          status?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entes_publicos_sublinks_ente_id_fkey"
+            columns: ["ente_id"]
+            isOneToOne: false
+            referencedRelation: "entes_publicos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fundaciones: {
+        Row: {
+          category: string
+          created_at: string
+          enabled: boolean
+          id: string
+          last_checked: string | null
+          last_hash: string | null
+          name: string
+          status: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          name: string
+          status?: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          name?: string
+          status?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      otras_fuentes: {
+        Row: {
+          category: string
+          created_at: string
+          enabled: boolean
+          id: string
+          last_checked: string | null
+          last_hash: string | null
+          name: string
+          status: string
+          type: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          name: string
+          status?: string
+          type: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          name?: string
+          status?: string
+          type?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      otras_fuentes_sublinks: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          fuente_id: string
+          id: string
+          last_checked: string | null
+          last_hash: string | null
+          status: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          fuente_id: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          status?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          fuente_id?: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          status?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "otras_fuentes_sublinks_fuente_id_fkey"
+            columns: ["fuente_id"]
+            isOneToOne: false
+            referencedRelation: "otras_fuentes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sublinks: {
         Row: {
