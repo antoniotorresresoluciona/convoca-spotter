@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Download, TrendingUp, CheckCircle, XCircle, Clock, BarChart3 } from 'lucide-react';
+import { Download, TrendingUp, CheckCircle, XCircle, Clock, BarChart3, Play } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { StatCard } from '@/components/StatCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +12,7 @@ const AdminDashboard = () => {
   const { toast } = useToast();
   const [changes, setChanges] = useState<Change[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMonitoring, setIsMonitoring] = useState(false);
 
   useEffect(() => {
     loadChanges();
@@ -80,6 +82,32 @@ const AdminDashboard = () => {
     });
   };
 
+  const runMonitoring = async () => {
+    setIsMonitoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('trigger-monitoring');
+
+      if (error) throw error;
+
+      toast({
+        title: 'Monitoreo completado',
+        description: `Resultados del monitoreo disponibles`,
+      });
+
+      // Recargar cambios
+      await loadChanges();
+    } catch (error) {
+      console.error('Error running monitoring:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo ejecutar el monitoreo',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsMonitoring(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <AdminLayout>
@@ -101,10 +129,20 @@ const AdminDashboard = () => {
               Estadísticas de los últimos 30 días
             </p>
           </div>
-          <Button onClick={handleExport} disabled={stats.relevant === 0}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar Relevantes
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={runMonitoring} 
+              disabled={isMonitoring}
+              variant="outline"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              {isMonitoring ? 'Monitoreando...' : 'Ejecutar Monitoreo'}
+            </Button>
+            <Button onClick={handleExport} disabled={stats.relevant === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Exportar Relevantes
+            </Button>
+          </div>
         </div>
 
         {/* Stats Overview */}

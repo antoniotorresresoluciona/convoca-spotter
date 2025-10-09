@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ExternalLink, Clock, Tag, FileText } from 'lucide-react';
+import { ExternalLink, Clock, Tag, FileText, Sparkles } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ export function ChangeDetailModal({ change, open, onOpenChange, onUpdate }: Chan
   const [notes, setNotes] = useState('');
   const [priority, setPriority] = useState<Change['priority']>('normal');
   const [isSaving, setIsSaving] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     if (change) {
@@ -95,6 +97,33 @@ export function ChangeDetailModal({ change, open, onOpenChange, onUpdate }: Chan
         description: 'No se pudo actualizar el estado',
         variant: 'destructive',
       });
+    }
+  };
+
+  const analyzeWithAI = async () => {
+    setIsAnalyzing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-change', {
+        body: { changeId: change.id }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Análisis completado',
+        description: 'El cambio ha sido analizado con IA',
+      });
+
+      onUpdate();
+    } catch (error) {
+      console.error('Error analyzing:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo analizar el cambio',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -172,7 +201,18 @@ export function ChangeDetailModal({ change, open, onOpenChange, onUpdate }: Chan
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="notes">Notas de Revisión</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="notes">Notas de Revisión</Label>
+              <Button
+                onClick={analyzeWithAI}
+                disabled={isAnalyzing}
+                size="sm"
+                variant="outline"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                {isAnalyzing ? 'Analizando con IA...' : 'Analizar con IA'}
+              </Button>
+            </div>
             <Textarea
               id="notes"
               value={notes}
