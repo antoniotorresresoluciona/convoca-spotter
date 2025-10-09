@@ -50,22 +50,37 @@ function extractRelevantLinks(html: string, baseUrl: string): string[] {
 }
 
 // Scraping de URL
-async function scrapeUrl(url: string): Promise<{ html: string; hash: string; sublinks?: string[] }> {
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; ConvocatoriasMonitor/1.0)',
-    },
+async function scrapeUrl(url: string, supabase: any): Promise<{ hash: string; sublinks?: string[] }> {
+  console.log(`Invoking extract-main-content for ${url}`);
+  const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-main-content', {
+    body: { url },
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+  if (extractionError) {
+    throw new Error(`Error invoking extract-main-content: ${extractionError.message}`);
   }
 
-  const html = await response.text();
-  const hash = await hashText(html);
-  const sublinks = extractRelevantLinks(html, url);
+  if (!extractionData || !extractionData.success || !extractionData.content) {
+    // If readability fails, we fallback to hashing the whole body, but we can't extract sublinks.
+    console.warn(`extract-main-content failed for ${url}. Falling back to full page hash.`);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ConvocatoriasMonitor/1.0)',
+      },
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const html = await response.text();
+    const hash = await hashText(html);
+    return { hash, sublinks: [] };
+  }
 
-  return { html, hash, sublinks };
+  const mainContent = extractionData.content.textContent || '';
+  const cleanedHtml = extractionData.content.htmlContent || '';
+
+  const hash = await hashText(mainContent);
+  const sublinks = extractRelevantLinks(cleanedHtml, url);
+
+  return { hash, sublinks };
 }
 
 Deno.serve(async (req) => {
@@ -101,7 +116,7 @@ Deno.serve(async (req) => {
       
       try {
         console.log(`Scraping fundacion: ${fundacion.name} - ${fundacion.url}`);
-        const { hash, sublinks } = await scrapeUrl(fundacion.url);
+        const { hash, sublinks } = await scrapeUrl(fundacion.url, supabase);
 
         const hasChanged = fundacion.last_hash && fundacion.last_hash !== hash;
 
@@ -162,7 +177,7 @@ Deno.serve(async (req) => {
 
         for (const sublink of enabledSublinks || []) {
           try {
-            const { hash: sublinkHash } = await scrapeUrl(sublink.url);
+            const { hash: sublinkHash } = await scrapeUrl(sublink.url, supabase);
             const sublinkChanged = sublink.last_hash && sublink.last_hash !== sublinkHash;
 
             await supabase
@@ -212,7 +227,7 @@ Deno.serve(async (req) => {
       
       try {
         console.log(`Scraping ente: ${ente.name} - ${ente.url}`);
-        const { hash, sublinks } = await scrapeUrl(ente.url);
+        const { hash, sublinks } = await scrapeUrl(ente.url, supabase);
 
         const hasChanged = ente.last_hash && ente.last_hash !== hash;
 
@@ -269,7 +284,7 @@ Deno.serve(async (req) => {
 
         for (const sublink of enabledSublinks || []) {
           try {
-            const { hash: sublinkHash } = await scrapeUrl(sublink.url);
+            const { hash: sublinkHash } = await scrapeUrl(sublink.url, supabase);
             const sublinkChanged = sublink.last_hash && sublink.last_hash !== sublinkHash;
 
             await supabase
@@ -317,7 +332,7 @@ Deno.serve(async (req) => {
       
       try {
         console.log(`Scraping fuente: ${fuente.name} - ${fuente.url}`);
-        const { hash, sublinks } = await scrapeUrl(fuente.url);
+        const { hash, sublinks } = await scrapeUrl(fuente.url, supabase);
 
         const hasChanged = fuente.last_hash && fuente.last_hash !== hash;
 
@@ -374,7 +389,7 @@ Deno.serve(async (req) => {
 
         for (const sublink of enabledSublinks || []) {
           try {
-            const { hash: sublinkHash } = await scrapeUrl(sublink.url);
+            const { hash: sublinkHash } = await scrapeUrl(sublink.url, supabase);
             const sublinkChanged = sublink.last_hash && sublink.last_hash !== sublinkHash;
 
             await supabase
