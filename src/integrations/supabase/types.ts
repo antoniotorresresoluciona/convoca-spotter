@@ -14,7 +14,128 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      change_history: {
+        Row: {
+          changes_description: string | null
+          detected_at: string
+          fundacion_id: string
+          id: string
+          reviewed: boolean
+          sublink_id: string | null
+          url: string
+        }
+        Insert: {
+          changes_description?: string | null
+          detected_at?: string
+          fundacion_id: string
+          id?: string
+          reviewed?: boolean
+          sublink_id?: string | null
+          url: string
+        }
+        Update: {
+          changes_description?: string | null
+          detected_at?: string
+          fundacion_id?: string
+          id?: string
+          reviewed?: boolean
+          sublink_id?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "change_history_fundacion_id_fkey"
+            columns: ["fundacion_id"]
+            isOneToOne: false
+            referencedRelation: "fundaciones"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_history_sublink_id_fkey"
+            columns: ["sublink_id"]
+            isOneToOne: false
+            referencedRelation: "sublinks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fundaciones: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          last_checked: string | null
+          last_hash: string | null
+          name: string
+          status: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          name: string
+          status?: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          name?: string
+          status?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      sublinks: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          fundacion_id: string
+          id: string
+          last_checked: string | null
+          last_hash: string | null
+          status: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          fundacion_id: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          status?: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          fundacion_id?: string
+          id?: string
+          last_checked?: string | null
+          last_hash?: string | null
+          status?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sublinks_fundacion_id_fkey"
+            columns: ["fundacion_id"]
+            isOneToOne: false
+            referencedRelation: "fundaciones"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
