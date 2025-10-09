@@ -1,1 +1,16 @@
 project_id = "cvihbwqujqupnhzvtosf"
+
+[functions.monitor-all-sources]
+verify_jwt = false
+
+[functions.trigger-monitoring]
+verify_jwt = false
+
+[functions.analyze-change]
+verify_jwt = false
+
+[functions.monitor-fundaciones]
+verify_jwt = false
+
+[functions.admin-set-password]
+verify_jwt = false
