@@ -14,13 +14,40 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_users: {
+        Row: {
+          created_at: string
+          id: string
+          password_hash: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          password_hash: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          password_hash?: string
+          username?: string
+        }
+        Relationships: []
+      }
       change_history: {
         Row: {
           changes_description: string | null
           detected_at: string
           fundacion_id: string
           id: string
+          notes: string | null
+          priority: string
           reviewed: boolean
+          reviewed_at: string | null
+          source_name: string | null
+          source_type: string | null
+          status: string
           sublink_id: string | null
           url: string
         }
@@ -29,7 +56,13 @@ export type Database = {
           detected_at?: string
           fundacion_id: string
           id?: string
+          notes?: string | null
+          priority?: string
           reviewed?: boolean
+          reviewed_at?: string | null
+          source_name?: string | null
+          source_type?: string | null
+          status?: string
           sublink_id?: string | null
           url: string
         }
@@ -38,7 +71,13 @@ export type Database = {
           detected_at?: string
           fundacion_id?: string
           id?: string
+          notes?: string | null
+          priority?: string
           reviewed?: boolean
+          reviewed_at?: string | null
+          source_name?: string | null
+          source_type?: string | null
+          status?: string
           sublink_id?: string | null
           url?: string
         }
