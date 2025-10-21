@@ -1,0 +1,329 @@
+---
+# Deployment del procesador de webhooks + integración Ollama
+# Este servicio recibe notificaciones de changedetection.io y las analiza con Ollama
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: convoca-ollama
+  labels:
+    app: convoca-spotter
+    component: ai-processor
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-config
+  namespace: convoca-ollama
+data:
+  OLLAMA_URL: "http://192.168.255.121:11434"  # Cambiar por tu URL de Ollama
+  OLLAMA_MODEL: "llama3.1:latest"  # Modelo corregido
+  CDIO_API_URL: "http://changedetection.changedetection.svc.cluster.local"
+  WEBHOOK_PORT: "8080"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ollama-secrets
+  namespace: convoca-ollama
+type: Opaque
+stringData:
+  CDIO_API_KEY: "convoca-spotter-api-key-2025"  # Mismo que en changedetection
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama-webhook-processor
+  namespace: convoca-ollama
+  labels:
+    app: ollama-processor
+spec:
+  replicas: 2  # Alta disponibilidad
+  selector:
+    matchLabels:
+      app: ollama-processor
+  template:
+    metadata:
+      labels:
+        app: ollama-processor
+    spec:
+      containers:
+        - name: processor
+          image: node:20-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              npm install express body-parser better-sqlite3
+              node /app/webhook-processor.js
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: OLLAMA_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ollama-config
+                  key: OLLAMA_URL
+            - name: OLLAMA_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: ollama-config
+                  key: OLLAMA_MODEL
+            - name: CDIO_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ollama-config
+                  key: CDIO_API_URL
+            - name: WEBHOOK_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: ollama-config
+                  key: WEBHOOK_PORT
+            - name: CDIO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ollama-secrets
+                  key: CDIO_API_KEY
+          volumeMounts:
+            - name: app-code
+              mountPath: /app
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: app-code
+          configMap:
+            name: webhook-processor-code
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-webhook-processor
+  namespace: convoca-ollama
+spec:
+  type: ClusterIP
+  selector:
+    app: ollama-processor
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+
+---
+# Código del procesador de webhooks
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webhook-processor-code
+  namespace: convoca-ollama
+data:
+  webhook-processor.js: |
+    const express = require('express');
+    const bodyParser = require('body-parser');
+
+    const app = express();
+    app.use(bodyParser.json());
+
+    const OLLAMA_URL = process.env.OLLAMA_URL;
+    const OLLAMA_MODEL = process.env.OLLAMA_MODEL;
+    const CDIO_API_URL = process.env.CDIO_API_URL;
+    const PORT = process.env.WEBHOOK_PORT || 8080;
+
+    // Stats
+    const stats = {
+      received: 0,
+      processed: 0,
+      errors: 0
+    };
+
+    /**
+     * Analiza cambios con Ollama
+     */
+    async function analyzeWithOllama(watchData) {
+      const prompt = `Eres un experto en analizar cambios en páginas web de convocatorias.
+
+    Fuente: ${watchData.title}
+    URL: ${watchData.url}
+    Cambio detectado: ${watchData.history_n || 'Cambio reciente'}
+
+    Analiza este cambio y responde en JSON:
+    {
+      "summary": "resumen breve del cambio (máx 2 líneas)",
+      "relevance": "ALTA|MEDIA|BAJA",
+      "keywords": ["palabra1", "palabra2", "palabra3"],
+      "is_new_convocatoria": true/false,
+      "deadline": "fecha si se menciona, null si no"
+    }`;
+
+      try {
+        const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: OLLAMA_MODEL,
+            prompt,
+            stream: false,
+            options: {
+              temperature: 0.3,
+              num_predict: 300
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Ollama error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const analysis = JSON.parse(data.response);
+
+        console.log(`✅ Análisis completado para: ${watchData.title}`);
+        console.log(`   Relevancia: ${analysis.relevance}`);
+        console.log(`   Nueva convocatoria: ${analysis.is_new_convocatoria}`);
+
+        return analysis;
+
+      } catch (error) {
+        console.error(`❌ Error en análisis Ollama: ${error.message}`);
+        return null;
+      }
+    }
+
+    /**
+     * Endpoint de webhook
+     */
+    app.post('/webhook', async (req, res) => {
+      stats.received++;
+      const payload = req.body;
+
+      console.log(`📨 Webhook recibido: ${payload.title || 'unknown'}`);
+
+      try {
+        // Analizar con Ollama
+        const analysis = await analyzeWithOllama(payload);
+
+        if (analysis) {
+          // Aquí podrías guardar en una DB, enviar notificaciones, etc.
+          // Por ahora solo loggeamos
+          console.log(`   Summary: ${analysis.summary}`);
+
+          stats.processed++;
+          res.status(200).json({
+            success: true,
+            analysis
+          });
+        } else {
+          stats.errors++;
+          res.status(500).json({
+            success: false,
+            error: 'Failed to analyze'
+          });
+        }
+
+      } catch (error) {
+        stats.errors++;
+        console.error(`❌ Error procesando webhook: ${error.message}`);
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    /**
+     * Health check
+     */
+    app.get('/health', (req, res) => {
+      res.json({
+        status: 'ok',
+        stats,
+        ollama_url: OLLAMA_URL,
+        ollama_model: OLLAMA_MODEL
+      });
+    });
+
+    /**
+     * Stats endpoint
+     */
+    app.get('/stats', (req, res) => {
+      res.json(stats);
+    });
+
+    // Iniciar servidor
+    app.listen(PORT, () => {
+      console.log('╔════════════════════════════════════════════════════╗');
+      console.log('║  Convoca-Spotter Ollama Webhook Processor         ║');
+      console.log('╚════════════════════════════════════════════════════╝');
+      console.log(`\n🚀 Servidor corriendo en puerto ${PORT}`);
+      console.log(`🤖 Ollama: ${OLLAMA_URL}`);
+      console.log(`📦 Modelo: ${OLLAMA_MODEL}`);
+      console.log(`\nEndpoints:`);
+      console.log(`  POST /webhook - Recibir notificaciones`);
+      console.log(`  GET  /health  - Health check`);
+      console.log(`  GET  /stats   - Estadísticas\n`);
+    });
+
+---
+# HorizontalPodAutoscaler para el procesador
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-ollama-processor
+  namespace: convoca-ollama
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ollama-webhook-processor
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# Ingress para webhooks (si necesitas exponerlo externamente)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ollama-webhook-ingress
+  namespace: convoca-ollama
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rate-limit: "100"  # Rate limiting
+spec:
+  rules:
+    - host: webhooks.convoca.yourdomain.com  # CAMBIAR
+      http:
+        paths:
+          - path: /webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: ollama-webhook-processor
+                port:
+                  number: 80

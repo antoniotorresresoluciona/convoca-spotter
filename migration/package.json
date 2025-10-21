@@ -1,0 +1,13 @@
+{
+  "name": "convoca-spotter-migration",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Migration script from Convoca-Spotter to changedetection.io",
+  "scripts": {
+    "migrate": "node export-to-changedetection.js",
+    "dry-run": "node export-to-changedetection.js --dry-run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1"
+  }
+}

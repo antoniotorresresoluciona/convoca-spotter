@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Lock, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,6 +89,13 @@ const AdminLogin = () => {
               {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
             </Button>
           </form>
+
+          <div className="mt-4 text-center text-sm">
+            <span className="text-muted-foreground">¿No tienes una cuenta? </span>
+            <Link to="/admin/register" className="text-primary hover:underline font-medium">
+              Regístrate aquí
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

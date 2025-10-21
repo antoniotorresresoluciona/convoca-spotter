@@ -1,0 +1,20 @@
+{
+  "name": "convoca-spotter-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend de producción para Convoca-Spotter",
+  "scripts": {
+    "start": "node server.js",
+    "monitor": "node cli.js",
+    "monitor:all": "node cli.js all",
+    "monitor:fundaciones": "node cli.js fundaciones",
+    "monitor:entes": "node cli.js entes",
+    "monitor:fuentes": "node cli.js fuentes"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "express": "^5.1.0",
+    "cors": "^2.8.5",
+    "bcryptjs": "^3.0.2"
+  }
+}

@@ -1,19 +1,25 @@
-import { supabase } from "@/integrations/supabase/client";
+const API_URL = typeof window !== 'undefined'
+  ? window.location.origin
+  : 'http://localhost:3000';
 
 export interface Change {
   id: string;
   fundacion_id: string | null;
-  sublink_id: string | null;
+  ente_publico_id: string | null;
+  otra_fuente_id: string | null;
+  change_type: string;
+  old_value: string | null;
+  new_value: string | null;
   url: string;
   detected_at: string;
-  reviewed: boolean;
-  changes_description: string | null;
   status: 'pending' | 'reviewing' | 'relevant' | 'discarded';
   priority: 'low' | 'normal' | 'high' | 'urgent';
   notes: string | null;
+  reviewed: boolean;
   reviewed_at: string | null;
   source_type: 'fundacion' | 'ente_publico' | 'otra_fuente' | null;
   source_name: string | null;
+  changes_description?: string | null;
 }
 
 export interface GroupedChanges {
@@ -31,16 +37,22 @@ export interface ChangeFilters {
 }
 
 export async function getChangesByStatus(filters: ChangeFilters = {}): Promise<GroupedChanges> {
-  let query = supabase
-    .from('change_history')
-    .select('*')
-    .order('detected_at', { ascending: false });
+  const response = await fetch(`${API_URL}/rest/v1/change_history?order=detected_at.desc`);
+
+  if (!response.ok) {
+    throw new Error('Error al cargar cambios');
+  }
+
+  const data = await response.json();
+  const changes = (data || []) as Change[];
 
   // Apply filters
+  let filteredChanges = changes;
+
   if (filters.dateRange && filters.dateRange !== 'all') {
     const now = new Date();
     const dateThreshold = new Date();
-    
+
     switch (filters.dateRange) {
       case '24h':
         dateThreshold.setHours(now.getHours() - 24);
@@ -52,29 +64,25 @@ export async function getChangesByStatus(filters: ChangeFilters = {}): Promise<G
         dateThreshold.setDate(now.getDate() - 30);
         break;
     }
-    
-    query = query.gte('detected_at', dateThreshold.toISOString());
+
+    filteredChanges = filteredChanges.filter(c =>
+      new Date(c.detected_at) >= dateThreshold
+    );
   }
 
   if (filters.sourceType && filters.sourceType !== 'all') {
-    query = query.eq('source_type', filters.sourceType);
+    filteredChanges = filteredChanges.filter(c => c.source_type === filters.sourceType);
   }
 
   if (filters.priority && filters.priority !== 'all') {
-    query = query.eq('priority', filters.priority);
+    filteredChanges = filteredChanges.filter(c => c.priority === filters.priority);
   }
 
-  const { data, error } = await query;
-
-  if (error) throw error;
-
-  const changes = (data || []) as Change[];
-
   return {
-    pending: changes.filter(c => c.status === 'pending'),
-    reviewing: changes.filter(c => c.status === 'reviewing'),
-    relevant: changes.filter(c => c.status === 'relevant'),
-    discarded: changes.filter(c => c.status === 'discarded'),
+    pending: filteredChanges.filter(c => c.status === 'pending'),
+    reviewing: filteredChanges.filter(c => c.status === 'reviewing'),
+    relevant: filteredChanges.filter(c => c.status === 'relevant'),
+    discarded: filteredChanges.filter(c => c.status === 'discarded'),
   };
 }
 
@@ -82,59 +90,76 @@ export async function updateChangeStatus(
   id: string,
   status: Change['status']
 ): Promise<void> {
-  const { error } = await supabase
-    .from('change_history')
-    .update({
+  const response = await fetch(`${API_URL}/rest/v1/change_history?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
       status,
+      reviewed: status === 'relevant' || status === 'discarded' ? 1 : 0,
       reviewed_at: new Date().toISOString(),
-      reviewed: status !== 'pending'
-    })
-    .eq('id', id);
+    }),
+  });
 
-  if (error) throw error;
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('Error updating status:', error);
+    throw new Error('Error al actualizar estado');
+  }
 }
 
 export async function updateChangeNotes(id: string, notes: string): Promise<void> {
-  const { error } = await supabase
-    .from('change_history')
-    .update({ notes })
-    .eq('id', id);
+  const response = await fetch(`${API_URL}/rest/v1/change_history?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ notes }),
+  });
 
-  if (error) throw error;
+  if (!response.ok) {
+    throw new Error('Error al actualizar notas');
+  }
 }
 
 export async function updateChangePriority(
   id: string,
   priority: Change['priority']
 ): Promise<void> {
-  const { error } = await supabase
-    .from('change_history')
-    .update({ priority })
-    .eq('id', id);
+  const response = await fetch(`${API_URL}/rest/v1/change_history?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ priority }),
+  });
 
-  if (error) throw error;
+  if (!response.ok) {
+    throw new Error('Error al actualizar prioridad');
+  }
 }
 
 export async function getChangeDetail(id: string): Promise<Change | null> {
-  const { data, error } = await supabase
-    .from('change_history')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const response = await fetch(`${API_URL}/rest/v1/change_history?id=eq.${id}`);
 
-  if (error) throw error;
-  return data as Change;
+  if (!response.ok) {
+    throw new Error('Error al cargar detalle');
+  }
+
+  const data = await response.json();
+  return data[0] as Change || null;
 }
 
 export function exportRelevantChanges(changes: Change[]): void {
   const relevant = changes.filter(c => c.status === 'relevant');
-  
+
   const csv = [
     ['Fuente', 'Tipo', 'URL', 'Detectado', 'Prioridad', 'Notas'].join(','),
     ...relevant.map(c => [
       c.source_name || 'N/A',
       c.source_type || 'N/A',
-      c.url,
+      c.url || 'N/A',
       new Date(c.detected_at).toLocaleString('es-ES'),
       c.priority,
       c.notes ? `"${c.notes.replace(/"/g, '""')}"` : ''

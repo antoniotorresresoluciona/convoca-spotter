@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { ExternalLink, ChevronDown, ChevronUp, Edit, Trash2, CheckCircle2, AlertCircle, Clock } from "lucide-react";
-import { Card } from "./ui/card";
+import { ExternalLink, ChevronDown, ChevronUp, Edit, Trash2, CheckCircle2, AlertCircle, Clock, Link2, Power } from "lucide-react";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 import { Fundacion } from "@/types/fundacion";
 
 interface FundacionCardProps {
@@ -14,59 +12,83 @@ interface FundacionCardProps {
 
 export function FundacionCard({ fundacion, onEdit, onDelete, onViewDetails }: FundacionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [editedUrl, setEditedUrl] = useState(fundacion.url);
 
   const statusConfig = {
     updated: {
       icon: CheckCircle2,
-      color: "text-success",
-      bg: "bg-success/10",
+      color: "text-black",
       label: "Actualizada",
     },
     unchanged: {
       icon: AlertCircle,
-      color: "text-muted-foreground",
-      bg: "bg-muted",
+      color: "text-neutral-500",
       label: "Sin cambios",
     },
     pending: {
       icon: Clock,
-      color: "text-warning",
-      bg: "bg-warning/10",
+      color: "text-neutral-500",
       label: "Pendiente",
     },
   };
 
-  const config = statusConfig[fundacion.status];
+  const config = statusConfig[fundacion.status] || statusConfig.pending;
   const StatusIcon = config.icon;
 
   const updatedSublinks = fundacion.sublinks?.filter(s => s.enabled && s.status === 'updated').length || 0;
 
   return (
-    <Card className="p-6 hover:shadow-lg transition-all duration-300 animate-fade-in border-l-4" style={{
-      borderLeftColor: fundacion.status === 'updated' ? 'hsl(var(--success))' : 'hsl(var(--border))'
+    <div className="bg-white border border-neutral-200 hover:border-neutral-400 transition-colors" style={{
+      borderLeftWidth: '4px',
+      borderLeftColor: fundacion.status === 'updated' ? '#000' : '#d4d4d4'
     }}>
-      <div className="space-y-4">
+      <div className="p-6 space-y-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 space-y-2">
-            <div className="flex items-center gap-3">
-              <h3 className="text-lg font-semibold text-foreground">{fundacion.name}</h3>
-              <Badge variant="outline" className="text-xs">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h3 className="text-base font-semibold text-black">{fundacion.name}</h3>
+              <span className="text-xs px-2.5 py-1 bg-neutral-100 text-neutral-700 border border-neutral-200">
                 {fundacion.category}
-              </Badge>
+              </span>
               {updatedSublinks > 0 && (
-                <Badge className="bg-success text-success-foreground">
+                <span className="text-xs px-2.5 py-1 bg-black text-white">
                   {updatedSublinks} {updatedSublinks === 1 ? 'actualización' : 'actualizaciones'}
-                </Badge>
+                </span>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-7 px-2 ${fundacion.enabled !== false ? 'text-green-600 hover:text-green-700 hover:bg-green-50' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-50'}`}
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`http://localhost:3000/rest/v1/fundaciones?id=eq.${fundacion.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ enabled: fundacion.enabled === false ? true : false })
+                    });
+                    if (response.ok) {
+                      fundacion.enabled = fundacion.enabled === false ? true : false;
+                      window.location.reload();
+                    }
+                  } catch (err) {
+                    console.error('Error toggling fundacion:', err);
+                  }
+                }}
+                title={fundacion.enabled !== false ? 'Desactivar monitoreo de la fundación' : 'Activar monitoreo de la fundación'}
+              >
+                <Power className="h-4 w-4 mr-1" />
+                {fundacion.enabled !== false ? 'Activo' : 'Inactivo'}
+              </Button>
             </div>
-            
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center gap-2 text-sm flex-wrap">
               <StatusIcon className={`h-4 w-4 ${config.color}`} />
-              <span className={`text-sm font-medium ${config.color}`}>{config.label}</span>
+              <span className={`font-medium ${config.color}`}>{config.label}</span>
               {fundacion.last_checked && (
-                <span className="text-xs text-muted-foreground">
-                  • Revisado: {new Date(fundacion.last_checked).toLocaleString('es-ES', {
+                <span className="text-neutral-500">
+                  • {new Date(fundacion.last_checked).toLocaleString('es-ES', {
                     day: '2-digit',
                     month: '2-digit',
                     year: 'numeric',
@@ -107,38 +129,143 @@ export function FundacionCard({ fundacion, onEdit, onDelete, onViewDetails }: Fu
         </div>
 
         {/* URL Principal */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="truncate">{fundacion.url}</span>
+        <div className="space-y-2 border-t border-neutral-100 pt-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-black">URL Principal:</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsEditingUrl(!isEditingUrl)}
+              title="Editar URL"
+              className="h-6"
+            >
+              <Link2 className="h-3 w-3" />
+            </Button>
+          </div>
+
+          {isEditingUrl ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={editedUrl}
+                onChange={(e) => setEditedUrl(e.target.value)}
+                className="flex-1 text-sm px-3 py-2 border border-neutral-300 bg-white text-black focus:outline-none focus:ring-2 focus:ring-black"
+                placeholder="https://..."
+              />
+              <Button
+                variant="default"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`http://localhost:3000/rest/v1/fundaciones?id=eq.${fundacion.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ url: editedUrl })
+                    });
+                    if (response.ok) {
+                      fundacion.url = editedUrl;
+                      setIsEditingUrl(false);
+                    }
+                  } catch (err) {
+                    console.error('Error updating URL:', err);
+                  }
+                }}
+              >
+                Guardar
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditedUrl(fundacion.url);
+                  setIsEditingUrl(false);
+                }}
+              >
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-neutral-600">
+              <span className="truncate flex-1">{fundacion.url}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 flex-shrink-0"
+                onClick={() => window.open(fundacion.url, '_blank')}
+                title="Abrir URL"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Sublinks Section */}
         {fundacion.sublinks && fundacion.sublinks.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-2 border-t border-neutral-100 pt-3">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full justify-between"
+              className="w-full justify-between hover:bg-neutral-50"
             >
-              <span className="text-sm font-medium">
+              <span className="text-sm font-medium text-black">
                 Subenlaces monitorizados ({fundacion.sublinks.filter(s => s.enabled).length})
               </span>
               {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
 
             {isExpanded && (
-              <div className="space-y-2 pl-4 border-l-2 border-muted">
-                {fundacion.sublinks.filter(s => s.enabled).map((sublink) => (
+              <div className="space-y-2 pl-4 border-l-2 border-neutral-200">
+                {fundacion.sublinks.map((sublink) => (
                   <div
                     key={sublink.id}
-                    className="flex items-center gap-2 text-sm p-2 rounded-md hover:bg-muted/50 transition-colors"
+                    className={`flex items-center gap-2 text-sm p-2 hover:bg-neutral-50 transition-colors ${
+                      !sublink.enabled ? 'opacity-50' : ''
+                    }`}
                   >
                     {sublink.status === 'updated' ? (
-                      <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-black flex-shrink-0" />
                     ) : (
-                      <AlertCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <AlertCircle className="h-4 w-4 text-neutral-400 flex-shrink-0" />
                     )}
-                    <span className="truncate flex-1 text-foreground">{sublink.url}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="truncate text-black">{sublink.link_text || 'Sin título'}</div>
+                      <div className="truncate text-xs text-neutral-500">{sublink.url}</div>
+                      {sublink.last_checked && (
+                        <div className="text-xs text-neutral-500">
+                          Revisado: {new Date(sublink.last_checked).toLocaleString('es-ES', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`h-6 w-6 flex-shrink-0 ${sublink.enabled ? 'text-black' : 'text-neutral-400'}`}
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(`http://localhost:3000/rest/v1/sublinks?id=eq.${sublink.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ enabled: sublink.enabled ? 0 : 1 })
+                          });
+                          if (response.ok) {
+                            sublink.enabled = !sublink.enabled;
+                            window.location.reload();
+                          }
+                        } catch (err) {
+                          console.error('Error toggling sublink:', err);
+                        }
+                      }}
+                      title={sublink.enabled ? 'Desactivar monitoreo' : 'Activar monitoreo'}
+                    >
+                      <Power className="h-3 w-3" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -155,7 +282,7 @@ export function FundacionCard({ fundacion, onEdit, onDelete, onViewDetails }: Fu
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2 pt-2 border-t border-neutral-100">
           <Button
             variant="outline"
             size="sm"
@@ -166,6 +293,6 @@ export function FundacionCard({ fundacion, onEdit, onDelete, onViewDetails }: Fu
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }

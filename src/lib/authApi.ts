@@ -1,5 +1,7 @@
-import { supabase } from "@/integrations/supabase/client";
-import bcrypt from "bcryptjs";
+// Usar la URL del navegador si estamos en el cliente, sino usar la variable de entorno
+const API_URL = typeof window !== 'undefined'
+  ? window.location.origin
+  : (import.meta.env.VITE_SUPABASE_URL || 'http://localhost:3000');
 
 export interface AdminUser {
   id: string;
@@ -11,30 +13,60 @@ const AUTH_TOKEN_KEY = 'admin_auth_token';
 const AUTH_USER_KEY = 'admin_user';
 
 export async function loginAdmin(username: string, password: string): Promise<AdminUser> {
-  // Get admin user
-  const { data, error } = await supabase
-    .from('admin_users')
-    .select('*')
-    .eq('username', username)
-    .single();
+  try {
+    const response = await fetch(`${API_URL}/rest/v1/rpc/login_admin`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+    });
 
-  if (error || !data) {
-    throw new Error('Usuario o contraseña incorrectos');
+    const result = await response.json();
+
+    if (!response.ok || result.error) {
+      throw new Error(result.error?.message || 'Usuario o contraseña incorrectos');
+    }
+
+    const user = result.data;
+
+    // Create session
+    const token = btoa(JSON.stringify({ id: user.id, username: user.username, timestamp: Date.now() }));
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify({ id: user.id, username: user.username, created_at: user.created_at }));
+
+    return user;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al iniciar sesión');
   }
+}
 
-  // Verify password
-  const isValid = await bcrypt.compare(password, data.password_hash);
-  
-  if (!isValid) {
-    throw new Error('Usuario o contraseña incorrectos');
+export async function registerAdmin(username: string, password: string): Promise<AdminUser> {
+  try {
+    const response = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Error al registrar usuario');
+    }
+
+    return result.user;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Error al registrar usuario');
   }
-
-  // Create session
-  const token = btoa(JSON.stringify({ id: data.id, username: data.username, timestamp: Date.now() }));
-  localStorage.setItem(AUTH_TOKEN_KEY, token);
-  localStorage.setItem(AUTH_USER_KEY, JSON.stringify({ id: data.id, username: data.username }));
-
-  return { id: data.id, username: data.username, created_at: data.created_at };
 }
 
 export function logoutAdmin(): void {

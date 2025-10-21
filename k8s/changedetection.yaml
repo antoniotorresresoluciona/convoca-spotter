@@ -1,0 +1,503 @@
+---
+# Namespace para changedetection.io
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: changedetection
+  labels:
+    app: convoca-spotter
+    environment: production
+
+---
+# Secret con credenciales de API y autenticación
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cdio-secrets
+  namespace: changedetection
+type: Opaque
+stringData:
+  # API Key para automatización (cambiar en producción)
+  CDIO_API_KEY: "convoca-spotter-api-key-2025"
+  # Credenciales básicas UI (opcional)
+  UI_BASIC_AUTH_USER: "admin"
+  UI_BASIC_AUTH_PASS: "ConvocaSpotter2025!"
+
+---
+# ConfigMap con configuración de changedetection.io
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cdio-config
+  namespace: changedetection
+data:
+  # URL WebSocket al pool de Playwright/Browserless
+  PLAYWRIGHT_DRIVER_URL: "ws://browserless-playwright.changedetection.svc.cluster.local:3000"
+  # Base URL pública (cambiar por tu dominio real)
+  BASE_URL: "https://convoca.yourdomain.com"
+  # Configuración adicional
+  HIDE_REFERER: "true"
+  FETCH_WORKERS: "10"
+
+---
+# PersistentVolumeClaim para datastore de changedetection.io
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cdio-datastore
+  namespace: changedetection
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi  # Aumentado para 45+ fuentes con historial
+  # Cambiar storageClassName según tu cluster:
+  # storageClassName: standard  # GKE
+  # storageClassName: managed-premium  # AKS
+  # storageClassName: gp3  # EKS
+
+---
+# Deployment de changedetection.io (controller único)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: changedetection
+  namespace: changedetection
+  labels:
+    app: changedetection
+    component: controller
+spec:
+  replicas: 1  # ¡ÚNICO para evitar corrupción del datastore!
+  strategy:
+    type: Recreate  # Importante: no RollingUpdate
+  selector:
+    matchLabels:
+      app: changedetection
+      component: controller
+  template:
+    metadata:
+      labels:
+        app: changedetection
+        component: controller
+    spec:
+      containers:
+        - name: changedetection
+          image: dgtlmoon/changedetection.io:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+              name: http
+              protocol: TCP
+          env:
+            - name: BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cdio-config
+                  key: BASE_URL
+            - name: PLAYWRIGHT_DRIVER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cdio-config
+                  key: PLAYWRIGHT_DRIVER_URL
+            - name: HIDE_REFERER
+              valueFrom:
+                configMapKeyRef:
+                  name: cdio-config
+                  key: HIDE_REFERER
+            - name: FETCH_WORKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: cdio-config
+                  key: FETCH_WORKERS
+            # API Key para automatización
+            - name: SALTED_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: cdio-secrets
+                  key: CDIO_API_KEY
+            # Opcional: Auth básica en la UI
+            # - name: WEBDRIVER_DELAY_BEFORE_CONTENT_READY
+            #   value: "5"
+          volumeMounts:
+            - name: datastore
+              mountPath: /datastore
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: datastore
+          persistentVolumeClaim:
+            claimName: cdio-datastore
+      # Afinidad: preferir nodos con SSD
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: node.kubernetes.io/instance-type
+                    operator: In
+                    values: ["ssd", "premium"]
+
+---
+# Service para changedetection.io
+apiVersion: v1
+kind: Service
+metadata:
+  name: changedetection
+  namespace: changedetection
+  labels:
+    app: changedetection
+spec:
+  type: ClusterIP
+  selector:
+    app: changedetection
+    component: controller
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+# Deployment del pool de Playwright/Browserless
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browserless-playwright
+  namespace: changedetection
+  labels:
+    app: browserless
+    component: playwright-pool
+spec:
+  replicas: 3  # Mínimo 3 para 45 fuentes
+  selector:
+    matchLabels:
+      app: browserless
+      component: playwright-pool
+  template:
+    metadata:
+      labels:
+        app: browserless
+        component: playwright-pool
+    spec:
+      containers:
+        - name: browserless
+          # Imagen con soporte Playwright
+          image: browserless/chromium:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          env:
+            # Sesiones simultáneas por pod
+            - name: MAX_CONCURRENT_SESSIONS
+              value: "5"
+            - name: CONNECTION_TIMEOUT
+              value: "600000"  # 10 minutos
+            - name: QUEUE_LENGTH
+              value: "100"
+            - name: DEFAULT_BLOCK_ADS
+              value: "true"
+            - name: DEFAULT_STEALTH
+              value: "true"
+            # Límites de recursos por navegador
+            - name: MAX_CPU_PERCENT
+              value: "95"
+            - name: MAX_MEMORY_PERCENT
+              value: "95"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "3000m"
+              memory: "6Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      # Anti-affinity: distribuir pods en diferentes nodos
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values: ["browserless"]
+                topologyKey: kubernetes.io/hostname
+
+---
+# Service para el pool de Playwright
+apiVersion: v1
+kind: Service
+metadata:
+  name: browserless-playwright
+  namespace: changedetection
+  labels:
+    app: browserless
+spec:
+  type: ClusterIP
+  selector:
+    app: browserless
+    component: playwright-pool
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+      protocol: TCP
+  sessionAffinity: None  # Round-robin para distribuir carga
+
+---
+# PodDisruptionBudget para alta disponibilidad del pool
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pdb-browserless
+  namespace: changedetection
+spec:
+  minAvailable: 2  # Siempre mantener al menos 2 pods disponibles
+  selector:
+    matchLabels:
+      app: browserless
+      component: playwright-pool
+
+---
+# HorizontalPodAutoscaler para el pool de Playwright
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-browserless
+  namespace: changedetection
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: browserless-playwright
+  minReplicas: 3
+  maxReplicas: 30  # Ajustar según capacidad del cluster
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100  # Duplicar pods rápidamente
+          periodSeconds: 60
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Esperar 5min antes de reducir
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 120
+        - type: Pods
+          value: 2
+          periodSeconds: 120
+      selectPolicy: Min
+
+---
+# Ingress para exponer changedetection.io (NGINX)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cdio-ingress
+  namespace: changedetection
+  annotations:
+    # Cambiar según tu Ingress Controller
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Si usas cert-manager
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # Opcional: rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  tls:
+    - hosts:
+        - convoca.yourdomain.com  # CAMBIAR POR TU DOMINIO
+      secretName: cdio-tls
+  rules:
+    - host: convoca.yourdomain.com  # CAMBIAR POR TU DOMINIO
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: changedetection
+                port:
+                  number: 80
+
+---
+# NetworkPolicy: Seguridad básica
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cdio-network-policy
+  namespace: changedetection
+spec:
+  podSelector:
+    matchLabels:
+      app: changedetection
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Permitir tráfico desde Ingress
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5000
+  egress:
+    # Permitir DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    # Permitir acceso a Playwright pool
+    - to:
+        - podSelector:
+            matchLabels:
+              app: browserless
+      ports:
+        - protocol: TCP
+          port: 3000
+    # Permitir salida a Internet (scraping)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+
+---
+# ConfigMap para scripts de mantenimiento
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cdio-scripts
+  namespace: changedetection
+data:
+  backup.sh: |
+    #!/bin/bash
+    # Backup del datastore de changedetection.io
+    set -e
+    BACKUP_DIR="/backups"
+    TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+    mkdir -p "$BACKUP_DIR"
+    tar czf "$BACKUP_DIR/cdio-backup-$TIMESTAMP.tar.gz" /datastore
+    echo "Backup creado: $BACKUP_DIR/cdio-backup-$TIMESTAMP.tar.gz"
+    # Limpieza: mantener solo últimos 7 backups
+    ls -t "$BACKUP_DIR"/cdio-backup-*.tar.gz | tail -n +8 | xargs -r rm
+
+---
+# CronJob para backups automáticos (opcional)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cdio-backup
+  namespace: changedetection
+spec:
+  schedule: "0 3 * * *"  # Diario a las 3 AM
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: alpine:latest
+              command: ["/bin/sh", "/scripts/backup.sh"]
+              volumeMounts:
+                - name: datastore
+                  mountPath: /datastore
+                  readOnly: true
+                - name: backups
+                  mountPath: /backups
+                - name: scripts
+                  mountPath: /scripts
+          volumes:
+            - name: datastore
+              persistentVolumeClaim:
+                claimName: cdio-datastore
+            - name: backups
+              persistentVolumeClaim:
+                claimName: cdio-backups
+            - name: scripts
+              configMap:
+                name: cdio-scripts
+                defaultMode: 0755
+
+---
+# PVC para backups (opcional)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cdio-backups
+  namespace: changedetection
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 100Gi

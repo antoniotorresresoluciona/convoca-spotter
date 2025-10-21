@@ -22,7 +22,6 @@ import {
   ChangeFilters,
 } from '@/lib/changesApi';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 
 interface KanbanBoardProps {
   filters: ChangeFilters;
@@ -70,31 +69,13 @@ export function KanbanBoard({ filters }: KanbanBoardProps) {
     loadChanges();
   }, [filters]);
 
-  // Realtime subscription
+  // Polling para actualizar cambios cada 30 segundos
   useEffect(() => {
-    const channel = supabase
-      .channel('change-history-updates')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'change_history' },
-        (payload) => {
-          console.log('Change detected:', payload);
-          
-          if (payload.eventType === 'INSERT') {
-            toast({
-              title: '🔔 Nuevo cambio detectado',
-              description: 'Se ha detectado un nuevo cambio en las fuentes',
-            });
-          }
-          
-          loadChanges();
-        }
-      )
-      .subscribe();
+    const interval = setInterval(() => {
+      loadChanges();
+    }, 30000);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => clearInterval(interval);
   }, [filters]);
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -203,21 +184,25 @@ export function KanbanBoard({ filters }: KanbanBoardProps) {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {columns.map((column) => (
-            <Card key={column.id} className="flex flex-col h-full">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center justify-between text-base">
-                  <div className="flex items-center gap-2">
-                    <column.icon className={`h-5 w-5 ${column.color}`} />
-                    <span>{column.title}</span>
+            <div
+              key={column.id}
+              className="flex flex-col bg-muted/30 rounded-lg p-4 min-h-[500px]"
+            >
+              <div className="flex items-center justify-between mb-4 pb-3 border-b">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-md ${column.bgColor}`}>
+                    <column.icon className={`h-4 w-4 ${column.color}`} />
                   </div>
-                  <Badge variant="secondary" className={column.bgColor}>
-                    {column.changes.length}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 overflow-y-auto max-h-[600px]">
+                  <h3 className="font-semibold text-sm">{column.title}</h3>
+                </div>
+                <Badge variant="secondary" className={`${column.bgColor} ${column.color} font-semibold`}>
+                  {column.changes.length}
+                </Badge>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700">
                 <SortableContext
                   id={column.id}
                   items={column.changes.map((c) => c.id)}
@@ -225,8 +210,11 @@ export function KanbanBoard({ filters }: KanbanBoardProps) {
                 >
                   <div className="space-y-3">
                     {column.changes.length === 0 ? (
-                      <div className="text-center text-sm text-muted-foreground py-8">
-                        No hay cambios
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <column.icon className={`h-12 w-12 ${column.color} opacity-20 mb-2`} />
+                        <p className="text-sm text-muted-foreground">
+                          No hay cambios
+                        </p>
                       </div>
                     ) : (
                       column.changes.map((change) => (
@@ -239,14 +227,14 @@ export function KanbanBoard({ filters }: KanbanBoardProps) {
                     )}
                   </div>
                 </SortableContext>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
 
         <DragOverlay>
           {activeChange && (
-            <div className="rotate-3">
+            <div className="rotate-3 scale-105 opacity-90">
               <ChangeCard change={activeChange} onViewDetails={() => {}} />
             </div>
           )}

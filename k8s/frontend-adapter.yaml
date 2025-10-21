@@ -1,0 +1,574 @@
+---
+# Backend Adapter: Traduce entre changedetection.io API y el frontend React
+# Este servicio actúa como proxy compatible con la API original
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: convoca-frontend
+  labels:
+    app: convoca-spotter
+    component: frontend
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adapter-config
+  namespace: convoca-frontend
+data:
+  CDIO_API_URL: "http://changedetection.changedetection.svc.cluster.local"
+  CDIO_API_KEY: "convoca-spotter-api-key-2025"
+  PORT: "3000"
+  NODE_ENV: "production"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adapter-code
+  namespace: convoca-frontend
+data:
+  server.js: |
+    const express = require('express');
+    const cors = require('cors');
+    const bcrypt = require('bcryptjs');
+
+    const app = express();
+    const PORT = process.env.PORT || 3000;
+    const CDIO_API_URL = process.env.CDIO_API_URL;
+    const CDIO_API_KEY = process.env.CDIO_API_KEY;
+
+    // Middleware
+    app.use(cors());
+    app.use(express.json());
+
+    // Logger
+    app.use((req, res, next) => {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+      next();
+    });
+
+    // In-memory users store (reemplazar con DB si necesario)
+    const users = [
+      {
+        id: 'admin-user-id',
+        username: 'admin',
+        password_hash: bcrypt.hashSync('admin123', 10),
+        created_at: new Date().toISOString()
+      }
+    ];
+
+    // Health check
+    app.get('/api/health', (req, res) => {
+      res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    });
+
+    // Auth - Login
+    app.post('/rest/v1/rpc/login_admin', async (req, res) => {
+      const { username, password } = req.body;
+
+      try {
+        const user = users.find(u => u.username === username);
+
+        if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+          return res.status(401).json({
+            data: null,
+            error: { message: 'Invalid credentials', code: 'UNAUTHORIZED' }
+          });
+        }
+
+        res.json({
+          data: {
+            id: user.id,
+            username: user.username,
+            created_at: user.created_at
+          },
+          error: null
+        });
+      } catch (error) {
+        res.status(500).json({
+          data: null,
+          error: { message: error.message, code: 'ERROR' }
+        });
+      }
+    });
+
+    // Auth - Check if has users
+    app.get('/api/auth/has-users', (req, res) => {
+      res.json({ hasUsers: users.length > 0 });
+    });
+
+    // Fundaciones - List
+    app.get('/rest/v1/fundaciones', async (req, res) => {
+      try {
+        // Fetch watches from changedetection.io
+        const response = await fetch(`${CDIO_API_URL}/api/v1/watch`, {
+          headers: { 'x-api-key': CDIO_API_KEY }
+        });
+
+        if (!response.ok) {
+          throw new Error(`CDIO API error: ${response.status}`);
+        }
+
+        const watches = await response.json();
+
+        // Transform to fundaciones format
+        const fundaciones = Object.entries(watches)
+          .filter(([_, watch]) => watch.tags?.includes('fundacion'))
+          .map(([uuid, watch]) => ({
+            id: uuid,
+            name: watch.title,
+            url: watch.url,
+            category: watch.tags?.find(t => t !== 'fundacion') || 'General',
+            last_hash: watch.last_check_status?.hash || null,
+            status: watch.last_check_status?.status === 'changed' ? 'updated' : 'unchanged',
+            last_checked: watch.last_checked || null,
+            enabled: 1,
+            created_at: watch.date_created || new Date().toISOString(),
+            updated_at: watch.date_updated || new Date().toISOString()
+          }));
+
+        res.json(fundaciones);
+      } catch (error) {
+        console.error('Error fetching fundaciones:', error);
+        res.status(500).json([]);
+      }
+    });
+
+    // Entes Públicos - List
+    app.get('/rest/v1/entes_publicos', async (req, res) => {
+      try {
+        const response = await fetch(`${CDIO_API_URL}/api/v1/watch`, {
+          headers: { 'x-api-key': CDIO_API_KEY }
+        });
+
+        if (!response.ok) {
+          throw new Error(`CDIO API error: ${response.status}`);
+        }
+
+        const watches = await response.json();
+
+        const entes = Object.entries(watches)
+          .filter(([_, watch]) => watch.tags?.includes('ente_publico'))
+          .map(([uuid, watch]) => ({
+            id: uuid,
+            name: watch.title,
+            url: watch.url,
+            category: watch.tags?.find(t => t !== 'ente_publico') || 'Ayudas Públicas',
+            entity: watch.title.split(' - ')[0] || 'Entidad',
+            last_hash: watch.last_check_status?.hash || null,
+            status: watch.last_check_status?.status === 'changed' ? 'updated' : 'unchanged',
+            last_checked: watch.last_checked || null,
+            enabled: 1,
+            created_at: watch.date_created || new Date().toISOString(),
+            updated_at: watch.date_updated || new Date().toISOString()
+          }));
+
+        res.json(entes);
+      } catch (error) {
+        console.error('Error fetching entes:', error);
+        res.status(500).json([]);
+      }
+    });
+
+    // Otras Fuentes - List
+    app.get('/rest/v1/otras_fuentes', async (req, res) => {
+      try {
+        const response = await fetch(`${CDIO_API_URL}/api/v1/watch`, {
+          headers: { 'x-api-key': CDIO_API_KEY }
+        });
+
+        if (!response.ok) {
+          throw new Error(`CDIO API error: ${response.status}`);
+        }
+
+        const watches = await response.json();
+
+        const fuentes = Object.entries(watches)
+          .filter(([_, watch]) => watch.tags?.includes('otra_fuente'))
+          .map(([uuid, watch]) => ({
+            id: uuid,
+            name: watch.title,
+            url: watch.url,
+            category: watch.tags?.find(t => t !== 'otra_fuente') || 'Agregadores',
+            last_hash: watch.last_check_status?.hash || null,
+            status: watch.last_check_status?.status === 'changed' ? 'updated' : 'unchanged',
+            last_checked: watch.last_checked || null,
+            enabled: 1,
+            created_at: watch.date_created || new Date().toISOString(),
+            updated_at: watch.date_updated || new Date().toISOString()
+          }));
+
+        res.json(fuentes);
+      } catch (error) {
+        console.error('Error fetching otras fuentes:', error);
+        res.status(500).json([]);
+      }
+    });
+
+    // Change History - List
+    app.get('/rest/v1/change_history', async (req, res) => {
+      try {
+        const response = await fetch(`${CDIO_API_URL}/api/v1/watch`, {
+          headers: { 'x-api-key': CDIO_API_KEY }
+        });
+
+        if (!response.ok) {
+          throw new Error(`CDIO API error: ${response.status}`);
+        }
+
+        const watches = await response.json();
+
+        // Transform watch history to change_history format
+        const changes = [];
+
+        for (const [uuid, watch] of Object.entries(watches)) {
+          if (watch.history && Array.isArray(watch.history)) {
+            watch.history.forEach((snapshot, idx) => {
+              changes.push({
+                id: `${uuid}-${idx}`,
+                fundacion_id: watch.tags?.includes('fundacion') ? uuid : null,
+                ente_publico_id: watch.tags?.includes('ente_publico') ? uuid : null,
+                otra_fuente_id: watch.tags?.includes('otra_fuente') ? uuid : null,
+                change_type: 'content_change',
+                old_value: snapshot.previous_hash || null,
+                new_value: snapshot.current_hash || null,
+                detected_at: snapshot.date || new Date().toISOString(),
+                status: 'unreviewed',
+                priority: 'normal',
+                source_type: watch.tags?.includes('fundacion') ? 'fundacion' :
+                            watch.tags?.includes('ente_publico') ? 'ente_publico' : 'otra_fuente',
+                source_name: watch.title,
+                url: watch.url,
+                changes_description: `Change detected at ${snapshot.date}`,
+                reviewed: 0
+              });
+            });
+          }
+        }
+
+        // Sort by date descending
+        changes.sort((a, b) => new Date(b.detected_at) - new Date(a.detected_at));
+
+        res.json(changes);
+      } catch (error) {
+        console.error('Error fetching change history:', error);
+        res.status(500).json([]);
+      }
+    });
+
+    // Sublinks - List (mock, changedetection.io no tiene este concepto)
+    app.get('/rest/v1/sublinks', (req, res) => {
+      res.json([]);
+    });
+
+    // Monitor endpoints (trigger checks)
+    app.post('/api/monitor/all', async (req, res) => {
+      try {
+        const response = await fetch(`${CDIO_API_URL}/api/v1/watch`, {
+          headers: { 'x-api-key': CDIO_API_KEY }
+        });
+
+        const watches = await response.json();
+        const watchIds = Object.keys(watches);
+
+        // Trigger recheck for all watches
+        const results = await Promise.allSettled(
+          watchIds.map(uuid =>
+            fetch(`${CDIO_API_URL}/api/v1/watch/${uuid}/recheck`, {
+              method: 'POST',
+              headers: { 'x-api-key': CDIO_API_KEY }
+            })
+          )
+        );
+
+        const successful = results.filter(r => r.status === 'fulfilled').length;
+
+        res.json({
+          success: true,
+          results: {
+            checked: watchIds.length,
+            changes: 0,
+            errors: watchIds.length - successful
+          }
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    app.post('/api/monitor/fundaciones', async (req, res) => {
+      // Similar a /all pero solo fundaciones
+      res.json({ success: true, results: { checked: 0, changes: 0, errors: 0 } });
+    });
+
+    app.post('/api/monitor/entes', async (req, res) => {
+      res.json({ success: true, results: { checked: 0, changes: 0, errors: 0 } });
+    });
+
+    app.post('/api/monitor/fuentes', async (req, res) => {
+      res.json({ success: true, results: { checked: 0, changes: 0, errors: 0 } });
+    });
+
+    // Start server
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log('╔════════════════════════════════════════════════════════╗');
+      console.log('║  Convoca-Spotter Frontend Adapter                      ║');
+      console.log('╚════════════════════════════════════════════════════════╝');
+      console.log(`\n🚀 Server running on port ${PORT}`);
+      console.log(`📡 changedetection.io: ${CDIO_API_URL}`);
+      console.log(`\nEndpoints:`);
+      console.log(`  POST /rest/v1/rpc/login_admin - Login`);
+      console.log(`  GET  /rest/v1/fundaciones - List fundaciones`);
+      console.log(`  GET  /rest/v1/entes_publicos - List entes`);
+      console.log(`  GET  /rest/v1/otras_fuentes - List otras fuentes`);
+      console.log(`  GET  /rest/v1/change_history - Change history`);
+      console.log(`  POST /api/monitor/all - Trigger monitoring\n`);
+    });
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-adapter
+  namespace: convoca-frontend
+  labels:
+    app: frontend-adapter
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend-adapter
+  template:
+    metadata:
+      labels:
+        app: frontend-adapter
+    spec:
+      containers:
+        - name: adapter
+          image: node:20-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cd /app
+              npm install express cors bcryptjs
+              node server.js
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: CDIO_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: adapter-config
+                  key: CDIO_API_URL
+            - name: CDIO_API_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: adapter-config
+                  key: CDIO_API_KEY
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: adapter-config
+                  key: PORT
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: adapter-config
+                  key: NODE_ENV
+          volumeMounts:
+            - name: code
+              mountPath: /app
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: code
+          configMap:
+            name: adapter-code
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-adapter
+  namespace: convoca-frontend
+  labels:
+    app: frontend-adapter
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend-adapter
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+
+---
+# Frontend estático (React build)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: convoca-frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      initContainers:
+        # Build frontend con variables de entorno correctas
+        - name: build
+          image: node:20-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              cd /source
+              npm install
+              VITE_SUPABASE_URL=http://frontend-adapter.convoca-frontend.svc.cluster.local:3000 \
+              VITE_SUPABASE_PUBLISHABLE_KEY=dummy-key \
+              npm run build
+              cp -r dist/* /build/
+          volumeMounts:
+            - name: source
+              mountPath: /source
+            - name: build
+              mountPath: /build
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+              name: http
+          volumeMounts:
+            - name: build
+              mountPath: /usr/share/nginx/html
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+      volumes:
+        - name: source
+          emptyDir: {}
+        - name: build
+          emptyDir: {}
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: convoca-frontend
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        # SPA routing
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Proxy API calls to adapter
+        location /api {
+            proxy_pass http://frontend-adapter:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
+
+        location /rest {
+            proxy_pass http://frontend-adapter:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+        }
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: convoca-frontend
+  labels:
+    app: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+
+---
+# Ingress para el frontend
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-ingress
+  namespace: convoca-frontend
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - convoca-app.yourdomain.com  # CAMBIAR
+      secretName: frontend-tls
+  rules:
+    - host: convoca-app.yourdomain.com  # CAMBIAR
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

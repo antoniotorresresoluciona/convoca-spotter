@@ -1,14 +1,17 @@
 export interface Sublink {
   id: string;
   url: string;
-  enabled: boolean;
+  enabled: number | boolean; // Database stores as INTEGER (0/1), may be boolean in UI
   last_hash?: string;
-  status: 'updated' | 'unchanged' | 'pending';
+  status: 'updated' | 'unchanged' | 'pending' | 'error';
   last_checked?: string;
   fundacion_id?: string;
   ente_id?: string;
   fuente_id?: string;
   created_at?: string;
+  link_text?: string;
+  priority?: string;
+  last_error?: string;
 }
 
 export interface Fundacion {

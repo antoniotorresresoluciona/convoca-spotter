@@ -1,5 +1,4 @@
 import { LucideIcon } from "lucide-react";
-import { Card } from "./ui/card";
 
 interface StatCardProps {
   title: string;
@@ -14,33 +13,23 @@ interface StatCardProps {
 
 export function StatCard({ title, value, icon: Icon, trend, variant = "default" }: StatCardProps) {
   const variantStyles = {
-    default: "from-primary/10 to-primary/5 border-primary/20",
-    success: "from-success/10 to-success/5 border-success/20",
-    warning: "from-warning/10 to-warning/5 border-warning/20",
-  };
-
-  const iconStyles = {
-    default: "bg-primary/10 text-primary",
-    success: "bg-success/10 text-success",
-    warning: "bg-warning/10 text-warning",
+    default: "border-neutral-200",
+    success: "border-neutral-200",
+    warning: "border-neutral-200",
   };
 
   return (
-    <Card className={`p-6 bg-gradient-to-br ${variantStyles[variant]} border transition-all hover:shadow-md animate-fade-in`}>
-      <div className="flex items-start justify-between">
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold text-foreground">{value}</p>
-          {trend && (
-            <p className={`text-xs font-medium ${trend.isPositive ? 'text-success' : 'text-destructive'}`}>
-              {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}% desde el último mes
-            </p>
-          )}
-        </div>
-        <div className={`p-3 rounded-xl ${iconStyles[variant]}`}>
-          <Icon className="h-6 w-6" />
-        </div>
+    <div className={`bg-white border ${variantStyles[variant]} p-6 hover:border-neutral-400 transition-colors`}>
+      <div className="flex items-start justify-between mb-4">
+        <p className="text-xs font-medium text-neutral-600 uppercase tracking-wide">{title}</p>
+        <Icon className="h-5 w-5 text-neutral-400" />
       </div>
-    </Card>
+      <p className="text-3xl font-semibold text-black">{value}</p>
+      {trend && (
+        <p className={`text-xs font-medium mt-2 ${trend.isPositive ? 'text-neutral-600' : 'text-neutral-600'}`}>
+          {trend.isPositive ? '↑' : '↓'} {Math.abs(trend.value)}% desde el último mes
+        </p>
+      )}
+    </div>
   );
 }

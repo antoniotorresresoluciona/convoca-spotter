@@ -120,25 +120,29 @@ const AdminDashboard = () => {
 
   return (
     <AdminLayout>
-      <div className="container mx-auto px-4 py-8 space-y-8">
+      <div className="space-y-8">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-neutral-200 pb-6">
           <div>
-            <h2 className="text-3xl font-bold">Dashboard</h2>
-            <p className="text-muted-foreground mt-1">
+            <h2 className="text-2xl font-semibold text-black">Dashboard</h2>
+            <p className="text-sm text-neutral-600 mt-1">
               Estadísticas de los últimos 30 días
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button 
-              onClick={runMonitoring} 
+          <div className="flex gap-3">
+            <Button
+              onClick={runMonitoring}
               disabled={isMonitoring}
-              variant="outline"
+              className="bg-neutral-900 text-white hover:bg-black"
             >
               <Play className="h-4 w-4 mr-2" />
               {isMonitoring ? 'Monitoreando...' : 'Ejecutar Monitoreo'}
             </Button>
-            <Button onClick={handleExport} disabled={stats.relevant === 0}>
+            <Button
+              onClick={handleExport}
+              disabled={stats.relevant === 0}
+              className="bg-black text-white hover:bg-neutral-800"
+            >
               <Download className="h-4 w-4 mr-2" />
               Exportar Relevantes
             </Button>
@@ -175,68 +179,64 @@ const AdminDashboard = () => {
 
         {/* Additional Metrics */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Tasa de Relevancia</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-primary">
-                {stats.relevanceRate}%
-              </div>
-              <p className="text-sm text-muted-foreground mt-2">
-                De los cambios revisados, {stats.relevanceRate}% fueron marcados como relevantes
-              </p>
-            </CardContent>
-          </Card>
+          <div className="bg-white border border-neutral-200 p-6">
+            <h3 className="text-xs font-medium text-neutral-600 uppercase tracking-wide mb-4">
+              Tasa de Relevancia
+            </h3>
+            <div className="text-4xl font-semibold text-black">
+              {stats.relevanceRate}%
+            </div>
+            <p className="text-sm text-neutral-600 mt-3">
+              De los cambios revisados, {stats.relevanceRate}% fueron marcados como relevantes
+            </p>
+          </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Estado de Revisión</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Pendientes</span>
-                <span className="font-semibold">{stats.pending}</span>
+          <div className="bg-white border border-neutral-200 p-6">
+            <h3 className="text-xs font-medium text-neutral-600 uppercase tracking-wide mb-4">
+              Estado de Revisión
+            </h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-neutral-100">
+                <span className="text-sm text-neutral-600">Pendientes</span>
+                <span className="font-semibold text-black">{stats.pending}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">En Revisión</span>
-                <span className="font-semibold">{stats.reviewing}</span>
+              <div className="flex justify-between items-center py-2 border-b border-neutral-100">
+                <span className="text-sm text-neutral-600">En Revisión</span>
+                <span className="font-semibold text-black">{stats.reviewing}</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Completados</span>
-                <span className="font-semibold">
+              <div className="flex justify-between items-center py-2">
+                <span className="text-sm text-neutral-600">Completados</span>
+                <span className="font-semibold text-black">
                   {stats.relevant + stats.discarded}
                 </span>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
         {/* Top Sources */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Top 5 Fuentes Más Activas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {stats.topSources.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No hay datos disponibles</p>
-            ) : (
-              <div className="space-y-3">
-                {stats.topSources.map(([source, count], index) => (
-                  <div key={source} className="flex items-center gap-3">
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-semibold text-sm">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{source}</p>
-                    </div>
-                    <div className="text-sm font-semibold">{count} cambios</div>
+        <div className="bg-white border border-neutral-200 p-6">
+          <h3 className="text-xs font-medium text-neutral-600 uppercase tracking-wide mb-4">
+            Top 5 Fuentes Más Activas
+          </h3>
+          {stats.topSources.length === 0 ? (
+            <p className="text-sm text-neutral-500">No hay datos disponibles</p>
+          ) : (
+            <div className="space-y-4">
+              {stats.topSources.map(([source, count], index) => (
+                <div key={source} className="flex items-center gap-4 py-3 border-b border-neutral-100 last:border-0">
+                  <div className="flex items-center justify-center w-8 h-8 bg-neutral-100 text-black font-semibold text-sm">
+                    {index + 1}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-black truncate">{source}</p>
+                  </div>
+                  <div className="text-sm font-semibold text-neutral-600">{count}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </AdminLayout>
   );

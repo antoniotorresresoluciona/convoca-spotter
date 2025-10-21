@@ -184,7 +184,15 @@ const FundacionesSection = () => {
   }
 
   return (
-    <main className="container mx-auto px-4 py-8 space-y-8">
+    <main className="space-y-8">
+      {/* Header */}
+      <div className="border-b border-neutral-200 pb-6">
+        <h2 className="text-2xl font-semibold text-black">Fundaciones</h2>
+        <p className="text-sm text-neutral-600 mt-1">
+          Gestiona las fundaciones monitoreadas
+        </p>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
@@ -214,7 +222,7 @@ const FundacionesSection = () => {
       </div>
 
       {/* Filters & Actions */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-6 rounded-xl border">
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-6 border border-neutral-200">
         <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -252,13 +260,12 @@ const FundacionesSection = () => {
           </Select>
         </div>
 
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex gap-3 w-full md:w-auto">
           <Button
-            variant="outline"
             size="sm"
             onClick={handleExportCSV}
             disabled={stats.updated === 0}
-            className="flex-1 md:flex-initial"
+            className="flex-1 md:flex-initial bg-neutral-100 text-neutral-900 hover:bg-neutral-200 border border-neutral-300"
           >
             <Download className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Exportar</span>
@@ -269,7 +276,7 @@ const FundacionesSection = () => {
               setEditingFundacion(null);
               setDialogOpen(true);
             }}
-            className="bg-gradient-primary flex-1 md:flex-initial"
+            className="flex-1 md:flex-initial bg-black text-white hover:bg-neutral-800"
           >
             <Plus className="h-4 w-4 mr-2" />
             Nueva
@@ -278,7 +285,7 @@ const FundacionesSection = () => {
             onClick={handleStartMonitoring}
             disabled={isMonitoring}
             size="sm"
-            className="bg-gradient-primary flex-1 md:flex-initial"
+            className="flex-1 md:flex-initial bg-neutral-900 text-white hover:bg-black"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${isMonitoring ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{isMonitoring ? 'Monitorizando...' : 'Monitoreo'}</span>
@@ -288,24 +295,24 @@ const FundacionesSection = () => {
       </div>
 
       {/* Fundaciones List */}
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">
-            Fundaciones ({filteredFundaciones.length})
-          </h2>
+          <h3 className="text-lg font-semibold text-black">
+            {filteredFundaciones.length} {filteredFundaciones.length === 1 ? 'Fundación' : 'Fundaciones'}
+          </h3>
         </div>
 
         {filteredFundaciones.length === 0 ? (
-          <div className="text-center py-12 bg-card rounded-xl border">
-            <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No se encontraron fundaciones</h3>
-            <p className="text-muted-foreground mb-4">
+          <div className="text-center py-16 bg-white border border-neutral-200">
+            <Building2 className="h-12 w-12 mx-auto text-neutral-300 mb-4" />
+            <h3 className="text-lg font-semibold text-black mb-2">No se encontraron fundaciones</h3>
+            <p className="text-sm text-neutral-600 mb-6">
               {searchQuery || categoryFilter !== "all" || statusFilter !== "all"
                 ? "Intenta ajustar los filtros de búsqueda"
                 : "Añade tu primera fundación para comenzar"}
             </p>
             {!(searchQuery || categoryFilter !== "all" || statusFilter !== "all") && (
-              <Button onClick={() => setDialogOpen(true)} className="bg-gradient-primary">
+              <Button onClick={() => setDialogOpen(true)} className="bg-black text-white hover:bg-neutral-800">
                 <Plus className="h-4 w-4 mr-2" />
                 Nueva Fundación
               </Button>
